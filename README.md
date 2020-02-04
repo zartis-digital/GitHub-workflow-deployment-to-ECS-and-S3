@@ -155,3 +155,32 @@ The second one updates the `AWS_ECS_SERVICE` on the ECS `AWS_ECS_CLUSTER` cluste
 The new revision of the Task Definition will update the service and trigger a re-deploy.
 
 You can find more info on [Github actions and AWS Fargate](https://aws.amazon.com/blogs/opensource/github-actions-aws-fargate/) and [ECS: Updating a Service](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/update-service.html) in the docs, but good luck using it!
+
+## Deploy client to S3 bucket
+
+This job will only run if the previous two jobs are successful, hence the `needs` attribute. First it will download the `clientbuild` artifact. The results will be uploaded to the `AWS_PRODUCTION_BUCKET_NAME` bucket, given the correct credentials.
+
+```
+    name: Deploy client
+    needs: [job_1, job_2]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download result for job 1
+        uses: actions/download-artifact@v1
+        with:
+          name: clientbuild
+      - name: Deploy to S3
+        uses: jakejarvis/s3-sync-action@master
+        with:
+          args: --acl public-read --delete
+        env:
+          AWS_S3_BUCKET: ${{ secrets.AWS_PRODUCTION_BUCKET_NAME }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          SOURCE_DIR: "clientbuild"
+```
+
+## TO-DOs
+
+The server Docker image shouldn't be pushed to ERC if the client build fails.
