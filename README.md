@@ -2,7 +2,7 @@
 
 > “I'd far rather be happy than right any day.”
 
-The file `.github/workflows/production.yml` contains the workflow definition for CD of a NodeJS express app to ECS and its React client to an S3 bucket.
+The file [`.github/workflows/production.yml`](.github/workflows/production.yml) contains the workflow definition for CD of a NodeJS express app to ECS and its React client to an S3 bucket.
 
 Client and server live on separate directories. In this case: `server` for the server, and `client` for the client.
 
