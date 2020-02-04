@@ -1,0 +1,27 @@
+name: Pull Request Build and Test
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  job_1:
+    name: Install and test client
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Client Yarn Install
+        working-directory: client
+        run: |
+          yarn install
+      - name: Client Unit Tests
+        working-directory: client
+        run: |
+          CI=true yarn test
+      - name: Server Yarn Install
+        working-directory: server
+        run: |
+          yarn install
+      - name: Server Unit Tests
+        working-directory: server
+        run: |
+          CI=true yarn test

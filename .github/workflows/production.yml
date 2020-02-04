@@ -1,0 +1,100 @@
+name: Production Build and Deploy
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  job_1:
+    name: Install, test and build client
+    env:
+      working-directory: client
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Client Yarn Install
+        working-directory: ${{ env.working-directory }}
+        run: |
+          yarn install
+      - name: Client Unit Tests
+        working-directory: ${{ env.working-directory }}
+        run: |
+          CI=true yarn test
+      - name: Make build directory
+        run: mkdir ./client/build
+      - name: Client build
+        working-directory: ${{ env.working-directory }}
+        run: |
+          yarn build
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v1
+        with:
+          name: clientbuild
+          path: client/build
+  job_2:
+    name: Install, test and deploy server
+    runs-on: ubuntu-latest
+    env:
+      working-directory: server
+    steps:
+      - uses: actions/checkout@v1
+      - name: Server Yarn Install
+        working-directory: ${{ env.working-directory }}
+        run: |
+          yarn install
+      - name: Server Unit Tests
+        working-directory: ${{ env.working-directory }}
+        run: |
+          CI=true yarn test
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        working-directory: ${{ env.working-directory }}
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+          IMAGE_TAG: ${{ github.run_id }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+      - name: Render Amazon ECS task definition
+        id: render-web-container
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ecs-task-definition.json
+          container-name: <container name>
+          image: ${{ steps.build-image.outputs.image }}
+      - name: Deploy to Amazon ECS service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-web-container.outputs.task-definition }}
+          service: ${{ secrets.AWS_ECS_SERVICE }}
+          cluster: ${{ secrets.AWS_ECS_CLUSTER }}
+  job_3:
+    name: Deploy client
+    needs: [job_1, job_2]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download result for job 1
+        uses: actions/download-artifact@v1
+        with:
+          name: clientbuild
+      - name: Deploy to S3
+        uses: jakejarvis/s3-sync-action@master
+        with:
+          args: --acl public-read --delete
+        env:
+          AWS_S3_BUCKET: ${{ secrets.AWS_PRODUCTION_BUCKET_NAME }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          SOURCE_DIR: "clientbuild"
